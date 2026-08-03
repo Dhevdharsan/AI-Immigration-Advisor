@@ -27,17 +27,10 @@ import json
 
 from openai import OpenAI
 
+from app.agents._quotes import quote_verified
 from app.config import GENERATOR_MODEL, OPENAI_API_KEY
 from app.schemas.contradiction import ContradictionResult, SupportingQuote
 from app.schemas.document import DOC_TYPE_PRIORITY, Document
-
-
-def _normalize(text: str) -> str:
-    return " ".join(text.split())
-
-
-def _quote_verified(quote: str, doc_text: str) -> bool:
-    return _normalize(quote) in _normalize(doc_text)
 
 _RESPONSE_SCHEMA = {
     "type": "object",
@@ -164,7 +157,7 @@ def find_contradictions(
         all_verified = (
             len(distinct_urls) >= 2
             and all(q.url in doc_by_url for q in quotes)
-            and all(_quote_verified(q.quote, doc_by_url[q.url].text) for q in quotes)
+            and all(quote_verified(q.quote, doc_by_url[q.url].text) for q in quotes)
         )
         if not all_verified:
             conflict_found = False
