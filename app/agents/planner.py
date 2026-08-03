@@ -79,6 +79,7 @@ def _classify(message: str, memory: dict[str, str], client: OpenAI) -> tuple[Cat
     memory_text = "\n".join(f"- {k}: {v}" for k, v in memory.items()) or "(none)"
     response = client.chat.completions.create(
         model=GENERATOR_MODEL,
+        temperature=0,  # classification/schema-checking should be consistent, not stylistically varied
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": f"Question: {message}\n\nAlready known (memory):\n{memory_text}"},

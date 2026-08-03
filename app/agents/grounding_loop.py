@@ -67,6 +67,7 @@ def _assess_and_generate(message: str, documents: list[Document], client: OpenAI
     passages = "\n\n".join(f"[{doc.title} -- {doc.url}]\n{doc.text[:60000]}" for doc in documents)
     response = client.chat.completions.create(
         model=GENERATOR_MODEL,
+        temperature=0,  # sufficiency/generation should be consistent, not stylistically varied
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": f"Question: {message}\n\nRetrieved passages:\n{passages}"},
