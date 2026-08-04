@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Immigration Navigator — Execution Trace</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --border: #dfe3e8;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --active: #16a34a;
+    --active-bg: #eafbef;
+    --abstain: #dc2626;
+    --abstain-bg: #fdeeee;
+    --idle-bg: #f1f2f4;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  header p { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  .ask-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  #question {
+    flex: 1;
+    padding: 11px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14.5px;
+  }
+  #ask-btn {
+    padding: 11px 20px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #ask-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 26px; }
+  .example-btn {
+    font-size: 12.5px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .example-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  #status { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; min-height: 18px; }
+
+  .graph {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 10px 4px 26px;
+  }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 150px; }
+  .arrow { color: var(--border); font-size: 20px; padding-top: 20px; flex-shrink: 0; }
+  .node {
+    width: 100%;
+    padding: 12px 10px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: var(--idle-bg);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  .node:hover { transform: translateY(-1px); }
+  .node .sub { display: block; font-weight: 400; font-size: 11px; margin-top: 3px; }
+  .node.visited { background: var(--active-bg); border-color: var(--active); color: #14532d; }
+  .node.abstain-hit { background: var(--abstain-bg); border-color: var(--abstain); color: #7f1d1d; }
+  .node.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .branch-down { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 6px; }
+  .branch-arrow { color: var(--border); font-size: 14px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-top: 8px;
+  }
+  .panel h2 { margin: 0 0 14px; font-size: 15px; }
+  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 8px 14px; font-size: 13.5px; margin-bottom: 6px; }
+  .kv .k { color: var(--muted); }
+  .kv .v { word-break: break-word; }
+  .badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .badge.high { background: #eafbef; color: #14532d; }
+  .badge.medium { background: #fff7e6; color: #92620a; }
+  .badge.low { background: #fdeeee; color: #7f1d1d; }
+  .badge.bool-true { background: #eafbef; color: #14532d; }
+  .badge.bool-false { background: #f1f2f4; color: var(--muted); }
+
+  .doc-list { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .doc-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .doc-card .title { font-weight: 600; margin-bottom: 3px; }
+  .doc-card a { color: var(--accent); font-size: 12px; word-break: break-all; }
+  .doc-card .meta { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+
+  .claim {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .claim.supported { border-left: 3px solid var(--active); }
+  .claim.unsupported { border-left: 3px solid var(--abstain); opacity: 0.75; }
+  .claim .quote {
+    display: none;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--code-bg);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+  }
+  .claim.open .quote { display: block; }
+
+  .answer-text { font-size: 15px; line-height: 1.55; margin-bottom: 14px; }
+  .followup, .docreq {
+    white-space: pre-wrap;
+    font-size: 13px;
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 10px;
+  }
+  .section-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 16px 0 6px; }
+
+  .empty { color: var(--muted); font-size: 13.5px; padding: 30px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Immigration Navigator — Execution Trace</h1>
+  <p>Every fork the pipeline can take is shown below. The path actually taken for your question is highlighted; click any node for the data behind it.</p>
+</header>
+
+<main>
+  <div class="ask-row">
+    <input id="question" type="text" placeholder="Ask an F-1 student visa question…" />
+    <button id="ask-btn">Ask</button>
+  </div>
+  <div class="examples">
+    <button class="example-btn" data-q="Can I work while my OPT extension is pending?">Can I work while my OPT extension is pending?</button>
+    <button class="example-btn" data-q="What happens to my F-1 status if my university closes down mid-semester?">University closes mid-semester (abstain example)</button>
+    <button class="example-btn" data-q="How many days can I be absent from the US while on OPT?">How many days can I be absent while on OPT?</button>
+  </div>
+  <div id="status"></div>
+
+  <div id="graph-wrap" style="display:none;">
+    <div class="graph" id="graph"></div>
+    <div class="panel" id="detail-panel"></div>
+  </div>
+
+  <div class="empty" id="empty-state">Ask a question above to see it traced through the pipeline.</div>
+</main>
+
+<script>
+const NODE_DEFS = [
+  { id: "planner", label: "Planner", sub: "classify + schema-check" },
+  { id: "ground", label: "Ground", sub: "retrieve + assess" },
+  { id: "contradiction", label: "Contradiction Check", sub: "compare evidence", abstainChild: "abstain_insufficient_retrieval", abstainLabel: "Abstain", abstainSub: "no source was sufficient", branchFrom: "ground" },
+  { id: "verify", label: "Verify", sub: "faithfulness + scope", abstainChild: "abstain_unresolved_contradiction", abstainLabel: "Abstain", abstainSub: "conflict unresolved", branchFrom: "contradiction" },
+  { id: "final", label: "Build Answer", sub: "assemble Answer", abstainChild: "abstain_verification_wipeout", abstainLabel: "Abstain", abstainSub: "nothing survived verification", branchFrom: "verify" },
+];
+
+let lastData = null;
+let selectedNode = null;
+
+document.getElementById("ask-btn").addEventListener("click", ask);
+document.getElementById("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
+document.querySelectorAll(".example-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.getElementById("question").value = btn.dataset.q;
+    ask();
+  });
+});
+
+async function ask() {
+  const question = document.getElementById("question").value.trim();
+  if (!question) return;
+
+  const btn = document.getElementById("ask-btn");
+  const status = document.getElementById("status");
+  btn.disabled = true;
+  status.textContent = "Running the pipeline (planner → ground → contradiction check → verify)…";
+  document.getElementById("empty-state").style.display = "none";
+
+  try {
+    const res = await fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: question }),
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    lastData = await res.json();
+    status.textContent = "";
+    document.getElementById("graph-wrap").style.display = "block";
+    renderGraph();
+    selectNode(pickDefaultNode());
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function pickDefaultNode() {
+  const a = lastData.answer;
+  if (!a.abstained) return "final";
+  if (a.abstain_reason === "insufficient_retrieval") return "abstain_insufficient_retrieval";
+  if (a.abstain_reason === "unresolved_contradiction") return "abstain_unresolved_contradiction";
+  return "abstain_verification_wipeout";
+}
+
+function visitedMainNodes() {
+  const visited = new Set(["planner", "ground"]);
+  if (lastData.contradiction !== null) visited.add("contradiction");
+  if (lastData.verification !== null) visited.add("verify");
+  if (!lastData.answer.abstained) visited.add("final");
+  return visited;
+}
+
+function hitAbstainId() {
+  const a = lastData.answer;
+  if (!a.abstained) return null;
+  return "abstain_" + a.abstain_reason;
+}
+
+function renderGraph() {
+  const visited = visitedMainNodes();
+  const abstainHit = hitAbstainId();
+  const graph = document.getElementById("graph");
+  graph.innerHTML = "";
+
+  NODE_DEFS.forEach((def, i) => {
+    if (i > 0) {
+      const arrow = document.createElement("div");
+      arrow.className = "arrow";
+      arrow.textContent = "→";
+      graph.appendChild(arrow);
+    }
+    const col = document.createElement("div");
+    col.className = "col";
+
+    const node = document.createElement("div");
+    node.className = "node" + (visited.has(def.id) ? " visited" : "");
+    node.dataset.id = def.id;
+    node.innerHTML = `${def.label}<span class="sub">${def.sub}</span>`;
+    node.addEventListener("click", () => selectNode(def.id));
+    col.appendChild(node);
+
+    if (def.abstainChild) {
+      const branch = document.createElement("div");
+      branch.className = "branch-down";
+      branch.innerHTML = `<span class="branch-arrow">↓ if not</span>`;
+      const abstainNode = document.createElement("div");
+      abstainNode.className = "node" + (abstainHit === def.abstainChild ? " abstain-hit" : "");
+      abstainNode.dataset.id = def.abstainChild;
+      abstainNode.innerHTML = `${def.abstainLabel}<span class="sub">${def.abstainSub}</span>`;
+      abstainNode.addEventListener("click", () => selectNode(def.abstainChild));
+      branch.appendChild(abstainNode);
+      col.appendChild(branch);
+    }
+
+    graph.appendChild(col);
+  });
+
+  markSelected();
+}
+
+function selectNode(id) {
+  selectedNode = id;
+  markSelected();
+  renderDetail(id);
+}
+
+function markSelected() {
+  document.querySelectorAll(".node").forEach((el) => {
+    el.classList.toggle("selected", el.dataset.id === selectedNode);
+  });
+}
+
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+function badge(value) {
+  return `<span class="badge ${value ? "bool-true" : "bool-false"}">${value ? "Yes" : "No"}</span>`;
+}
+
+function renderDocList(docs) {
+  if (!docs || docs.length === 0) return "<p class='empty' style='padding:10px 0;'>No documents.</p>";
+  return `<div class="doc-list">${docs.map((d) => `
+    <div class="doc-card">
+      <div class="title">${esc(d.title)}</div>
+      <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a>
+      <div class="meta">${esc(d.source)} · ${esc(d.doc_type)} · tier ${esc(d.tier)} · updated ${esc(d.last_updated) || "unknown"}</div>
+    </div>`).join("")}</div>`;
+}
+
+function renderDetail(id) {
+  const panel = document.getElementById("detail-panel");
+  const { plan, grounding, contradiction, verification, answer } = lastData;
+
+  if (id === "planner") {
+    panel.innerHTML = `<h2>Planner</h2>
+      <div class="kv">
+        <div class="k">Category</div><div class="v">${esc(plan.category)}</div>
+        <div class="k">Missing fields</div><div class="v">${plan.missing_fields.length ? esc(plan.missing_fields.join(", ")) : "(none)"}</div>
+        <div class="k">Needs document</div><div class="v">${badge(plan.needs_document)}</div>
+        <div class="k">Needs clarification</div><div class="v">${esc(plan.needs_clarification) || "(none)"}</div>
+        <div class="k">Preferred retrieval</div><div class="v">${esc(plan.preferred_retrieval)}</div>
+      </div>`;
+  } else if (id === "ground") {
+    panel.innerHTML = `<h2>Grounding Loop</h2>
+      <div class="kv">
+        <div class="k">Sufficient</div><div class="v">${badge(grounding.sufficient)}</div>
+        <div class="k">Rounds used</div><div class="v">${esc(grounding.rounds_used)}</div>
+      </div>
+      <div class="section-label">Retrieved documents</div>
+      ${renderDocList(grounding.documents)}
+      ${grounding.draft_answer ? `<div class="section-label">Draft answer (pre-verification)</div><div class="answer-text" style="font-size:13.5px;">${esc(grounding.draft_answer)}</div>` : ""}`;
+  } else if (id === "contradiction") {
+    if (!contradiction) {
+      panel.innerHTML = `<h2>Contradiction Check</h2><p class="empty">Not reached -- grounding was insufficient.</p>`;
+      return;
+    }
+    panel.innerHTML = `<h2>Contradiction Finder</h2>
+      <div class="kv">
+        <div class="k">Conflict found</div><div class="v">${badge(contradiction.conflict_found)}</div>
+        <div class="k">Resolved</div><div class="v">${badge(contradiction.resolved)}</div>
+        <div class="k">Winning source</div><div class="v">${contradiction.winning_document ? esc(contradiction.winning_document.title) : "(none picked)"}</div>
+        <div class="k">Rationale</div><div class="v">${esc(contradiction.rationale)}</div>
+      </div>
+      ${contradiction.supporting_quotes.length ? `<div class="section-label">Supporting quotes</div>${contradiction.supporting_quotes.map((q) => `<div class="doc-card" style="margin-bottom:8px;"><div class="meta">${esc(q.url)}</div>"${esc(q.quote)}"</div>`).join("")}` : ""}
+      <div class="section-label">All documents compared</div>
+      ${renderDocList(contradiction.all_documents)}`;
+  } else if (id === "verify") {
+    if (!verification) {
+      panel.innerHTML = `<h2>Verifier</h2><p class="empty">Not reached -- the contradiction wasn't resolved.</p>`;
+      return;
+    }
+    panel.innerHTML = `<h2>Verifier</h2>
+      <div class="kv">
+        <div class="k">Grounding rate</div><div class="v">${(verification.grounding_rate * 100).toFixed(0)}%</div>
+        <div class="k">Scope gate passes</div><div class="v">${badge(verification.scope.passes)}</div>
+      </div>
+      ${verification.scope.explanation ? `<div class="section-label">Scope gate explanation</div><div class="v">${esc(verification.scope.explanation)}</div>` : ""}
+      <div class="section-label">Claims (click to see evidence)</div>
+      ${verification.claims.map((c) => `
+        <div class="claim ${c.supported ? "supported" : "unsupported"}" onclick="this.classList.toggle('open')">
+          ${c.supported ? "✓" : "✗"} ${esc(c.claim)}
+          ${c.quote ? `<div class="quote">"${esc(c.quote)}"<br><span style="opacity:0.7;">— ${esc(c.source_url)}</span></div>` : ""}
+        </div>`).join("")}`;
+  } else if (id === "final") {
+    panel.innerHTML = renderAnswer(answer, false);
+  } else if (id.startsWith("abstain_")) {
+    panel.innerHTML = renderAnswer(answer, true);
+  }
+}
+
+function renderAnswer(answer, isAbstainView) {
+  if (answer.abstained) {
+    return `<h2>Abstained — ${esc(answer.abstain_reason)}</h2>
+      <div class="followup">${esc(answer.human_follow_up)}</div>
+      ${answer.document_request ? `<div class="section-label">Document request</div><div class="docreq">${esc(answer.document_request)}</div>` : ""}`;
+  }
+  const confClass = (answer.confidence || "").toLowerCase();
+  return `<h2>Answer <span class="badge ${confClass}">${esc(answer.confidence)} confidence</span></h2>
+    <div class="answer-text">${esc(answer.answer)}</div>
+    <div class="kv">
+      <div class="k">Source</div><div class="v">${answer.source ? `<a href="${esc(answer.source.url)}" target="_blank">${esc(answer.source.title)}</a>` : "—"}</div>
+      ${answer.source_rationale ? `<div class="k">Source rationale</div><div class="v">${esc(answer.source_rationale)}</div>` : ""}
+      <div class="k">Last updated</div><div class="v">${esc(answer.last_updated) || "unknown"}</div>
+      <div class="k">Missing information</div><div class="v">${answer.missing_information.length ? esc(answer.missing_information.join(", ")) : "(none)"}</div>
+    </div>
+    ${answer.document_request ? `<div class="section-label">Document request</div><div class="docreq">${esc(answer.document_request)}</div>` : ""}
+    <div class="section-label">Route for your specific situation</div>
+    <div class="followup">${esc(answer.human_follow_up)}</div>`;
+}
+</script>
+
+</body>
+</html>

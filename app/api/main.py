@@ -2,11 +2,17 @@
 FastAPI entry point (Section 10/11). One endpoint: POST /ask runs the full
 graph (planner -> grounding loop -> Contradiction Finder -> verifier) and
 returns every stage's output, not just the final answer -- this is exactly
-what the execution-trace view (task #9) will need, so returning it now
-avoids throwing away information the graph already computed.
+what the execution-trace view (task #9) needs, so returning it now avoids
+throwing away information the graph already computed.
+
+The trace view itself (app/static/index.html) is a single static page --
+no build step, no separate frontend project (task #9 is an inspection
+tool first). Mounted at /ui rather than "/" to keep it clearly separate
+from the API routes.
 """
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.agents.pipeline import build_graph
@@ -35,3 +41,6 @@ def ask(request: AskRequest) -> dict:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")
