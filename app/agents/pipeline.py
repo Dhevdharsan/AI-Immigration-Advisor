@@ -21,6 +21,7 @@ Three distinct abstain reasons, matching Section 9's failure-mode table:
     individualized recommendation, so nothing survived to answer with.
 """
 
+import time
 from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -46,6 +47,25 @@ class PipelineState(TypedDict, total=False):
     contradiction: ContradictionResult | None
     verification: VerificationResult
     answer: Answer
+    timings: dict[str, float]  # seconds per node -- see _timed, added to answer latency instrumentation
+
+
+def _timed(name: str):
+    """Wraps a node function to record its wall-clock duration into state["timings"]
+    under `name`, merging with whatever prior nodes already recorded (langgraph's
+    default merge is last-write-wins per key, so this reads the incoming state's
+    timings and returns an updated copy rather than relying on a custom reducer)."""
+
+    def decorator(fn):
+        def wrapper(state: PipelineState) -> dict:
+            start = time.perf_counter()
+            result = fn(state)
+            elapsed = round(time.perf_counter() - start, 3)
+            return {**result, "timings": {**state.get("timings", {}), name: elapsed}}
+
+        return wrapper
+
+    return decorator
 
 
 def _build_human_follow_up(current_plan: Plan, source: Document | None) -> str:
@@ -92,19 +112,23 @@ def _compute_confidence(source: Document, corroborated: bool, conflict_found: bo
     return Confidence.MEDIUM
 
 
+@_timed("plan")
 def _plan_node(state: PipelineState) -> dict:
     return {"plan": plan(state["message"], state.get("memory", {}))}
 
 
+@_timed("ground")
 def _ground_node(state: PipelineState) -> dict:
     return {"grounding": ground(state["message"], state["plan"])}
 
 
+@_timed("contradiction")
 def _contradiction_node(state: PipelineState) -> dict:
     grounding = state["grounding"]
     return {"contradiction": find_contradictions(state["message"], grounding.documents)}
 
 
+@_timed("verify")
 def _verify_node(state: PipelineState) -> dict:
     grounding = state["grounding"]
     contradiction = state["contradiction"]

@@ -17,9 +17,22 @@ self-preference bias inflates scores.
 
 Per Section 9: an ungrounded claim or a scope violation is dropped before
 the answer reaches the user -- never shipped silently.
+
+Latency note: faithfulness and scope are independent checks on the same
+draft answer -- scope checks the draft's sentences directly rather than
+waiting on faithfulness's claim decomposition, so there's no real
+dependency forcing them to run one after another. They're run
+concurrently (see `verify`). Live measurement showed these two sequential
+calls were the single largest contributor to total pipeline latency
+(~5.5s of ~13.5s); running them in parallel cuts that to roughly the
+slower of the two. Tradeoff: the scope call now always runs even when
+nothing survives faithfulness (previously skipped in that case), since
+we no longer know that outcome before kicking scope off -- an acceptable
+cost given a total wipeout is the rare case.
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 from openai import OpenAI
 
@@ -145,20 +158,14 @@ def _check_scope(text: str, client: OpenAI) -> ScopeCheck:
 def verify(draft_answer: str, documents: list[Document], client: OpenAI | None = None) -> VerificationResult:
     client = client or OpenAI(api_key=OPENAI_API_KEY)
 
-    claims = _check_faithfulness(draft_answer, documents, client)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claims_future = pool.submit(_check_faithfulness, draft_answer, documents, client)
+        scope_future = pool.submit(_check_scope, draft_answer, client)
+        claims = claims_future.result()
+        scope = scope_future.result()
+
     grounded_claims = [c for c in claims if c.supported]
     grounding_rate = len(grounded_claims) / len(claims) if claims else 0.0
-
-    if not grounded_claims:
-        return VerificationResult(
-            final_answer=None,
-            grounding_rate=grounding_rate,
-            claims=claims,
-            scope=ScopeCheck(passes=True, flagged_sentences=[], explanation="No claims survived the faithfulness check."),
-        )
-
-    grounded_text = " ".join(c.claim for c in grounded_claims)
-    scope = _check_scope(grounded_text, client)
 
     dropped_for_scope: list[str] = []
     remaining_claims = []

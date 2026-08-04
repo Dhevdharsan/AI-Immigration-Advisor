@@ -11,6 +11,8 @@ tool first). Mounted at /ui rather than "/" to keep it clearly separate
 from the API routes.
 """
 
+import time
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -28,13 +30,16 @@ class AskRequest(BaseModel):
 
 @app.post("/ask")
 def ask(request: AskRequest) -> dict:
+    start = time.perf_counter()
     result = _graph.invoke({"message": request.message, "memory": request.memory})
+    total_seconds = round(time.perf_counter() - start, 3)
     return {
         "plan": result["plan"].model_dump(mode="json"),
         "grounding": result["grounding"].model_dump(mode="json"),
         "contradiction": result["contradiction"].model_dump(mode="json") if result.get("contradiction") else None,
         "verification": result["verification"].model_dump(mode="json") if result.get("verification") else None,
         "answer": result["answer"].model_dump(mode="json"),
+        "timings": {**result.get("timings", {}), "total": total_seconds},
     }
 
 
