@@ -35,6 +35,7 @@ class Answer(BaseModel):
     source_rationale: str | None = None  # Contradiction Finder's one-line rationale, if it ran
     confidence: Confidence | None = None
     missing_information: list[str] = []
+    document_request: str | None = None  # set when plan.needs_document -- see pipeline.py's _build_document_request
     human_follow_up: str
     last_updated: date | None = None
     abstained: bool = False

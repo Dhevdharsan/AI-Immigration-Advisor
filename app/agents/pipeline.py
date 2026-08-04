@@ -34,6 +34,7 @@ from app.schemas.contradiction import ContradictionResult
 from app.schemas.document import Document
 from app.schemas.grounding import GroundingResult
 from app.schemas.plan import Plan
+from app.schemas.taxonomy import CATEGORY_SCHEMAS
 from app.schemas.verification import VerificationResult
 
 
@@ -58,6 +59,26 @@ def _build_human_follow_up(current_plan: Plan, source: Document | None) -> str:
     if current_plan.needs_clarification:
         lines.append(f"- Specifically: {current_plan.needs_clarification}")
     return "\n".join(lines)
+
+
+def _build_document_request(current_plan: Plan) -> str | None:
+    """User-requested behavior (not the flowchart's literal gate, Section 10): the general
+    rule still answers immediately regardless of needs_document -- but a document is also
+    explicitly requested alongside it, rather than only appearing as a passive
+    'missing info' note. Re-derives which specific missing fields are document-derivable
+    (an I-20/EAD/notice could supply them) using the same per-category schema the planner
+    itself used, so this doesn't ask for a document to resolve a fact only the person can
+    state (Section 6's needs_clarification territory instead)."""
+    if not current_plan.needs_document:
+        return None
+    schema = CATEGORY_SCHEMAS[current_plan.category]
+    field_by_name = {f.name: f for f in schema.required_fields}
+    document_derivable_missing = [f for f in current_plan.missing_fields if field_by_name[f].document_derivable]
+    fields_text = ", ".join(document_derivable_missing) or "the details relevant to your question"
+    return (
+        "To give you more specific guidance, you can upload your I-20, EAD card, or the "
+        f"relevant USCIS/SEVIS notice -- this would help confirm: {fields_text}."
+    )
 
 
 def _compute_confidence(source: Document, corroborated: bool, conflict_found: bool, grounding_rate: float) -> Confidence:
@@ -112,6 +133,7 @@ def _build_answer_node(state: PipelineState) -> dict:
         source_rationale=contradiction.rationale if contradiction.conflict_found else None,
         confidence=confidence,
         missing_information=current_plan.missing_fields,
+        document_request=_build_document_request(current_plan),
         human_follow_up=_build_human_follow_up(current_plan, source),
         last_updated=source.last_updated if source else None,
     )
@@ -138,6 +160,7 @@ def _abstain_node(state: PipelineState, reason: str) -> dict:
         answer=None,
         source=source,
         missing_information=current_plan.missing_fields,
+        document_request=_build_document_request(current_plan),
         human_follow_up=human_follow_up,
         abstained=True,
         abstain_reason=reason,

@@ -61,6 +61,41 @@ def test_happy_path_builds_answer():
     assert answer.answer == "Answer text."
     assert answer.source == doc
     assert answer.missing_information == ["OPT/CPT Dates"]
+    # User-requested behavior: still answer immediately, but also explicitly ask for a
+    # document when the plan flags needs_document -- not just a passive missing-info note.
+    assert answer.document_request is not None
+    assert "OPT/CPT Dates" in answer.document_request
+
+
+def test_no_document_request_when_plan_does_not_need_one():
+    doc = _doc()
+    plan_without_document = Plan(
+        category=Category.WORK_AUTHORIZATION,
+        missing_fields=[],
+        needs_document=False,
+        needs_clarification=None,
+        preferred_retrieval=RetrievalSource.USCIS,
+    )
+    with (
+        patch("app.agents.pipeline.plan", return_value=plan_without_document),
+        patch("app.agents.pipeline.ground", return_value=GroundingResult(sufficient=True, documents=[doc], draft_answer="Answer text.", rounds_used=1)),
+        patch(
+            "app.agents.pipeline.find_contradictions",
+            return_value=ContradictionResult(conflict_found=False, resolved=True, winning_document=doc, rationale="Only source.", all_documents=[doc]),
+        ),
+        patch(
+            "app.agents.pipeline.verify",
+            return_value=VerificationResult(
+                final_answer="Answer text.",
+                grounding_rate=1.0,
+                claims=[ClaimCheck(claim="Answer text.", supported=True, source_url=doc.url, quote="Some text.")],
+                scope=ScopeCheck(passes=True, flagged_sentences=[], explanation=""),
+            ),
+        ),
+    ):
+        result = _invoke()
+
+    assert result["answer"].document_request is None
 
 
 def test_abstains_when_grounding_insufficient():
