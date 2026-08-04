@@ -6,171 +6,305 @@
 <title>Immigration Navigator — Execution Trace</title>
 <style>
   :root {
-    --bg: #f7f8fa;
+    --bg: #f4f5f8;
     --panel: #ffffff;
-    --border: #dfe3e8;
-    --text: #1f2430;
+    --border: #e4e7ec;
+    --border-soft: #edeff3;
+    --text: #14171f;
     --muted: #6b7280;
-    --accent: #2563eb;
+    --muted-soft: #9aa1af;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
     --active: #16a34a;
-    --active-bg: #eafbef;
+    --active-bg: #ecfdf3;
     --abstain: #dc2626;
-    --abstain-bg: #fdeeee;
-    --idle-bg: #f1f2f4;
-    --code-bg: #f3f4f6;
+    --abstain-bg: #fef2f2;
+    --amber: #b45309;
+    --amber-bg: #fffbeb;
+    --idle-bg: #f6f7f9;
+    --idle-text: #9aa1af;
+    --code-bg: #f6f7f9;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+    --shadow-md: 0 4px 10px rgba(16, 24, 40, 0.06), 0 2px 4px rgba(16, 24, 40, 0.05);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0f14;
+      --panel: #15181f;
+      --border: #262a35;
+      --border-soft: #1d2029;
+      --text: #eef0f4;
+      --muted: #9198a8;
+      --muted-soft: #6b7182;
+      --accent: #818cf8;
+      --accent-soft: #1e1f3a;
+      --active: #4ade80;
+      --active-bg: #0f2418;
+      --abstain: #f87171;
+      --abstain-bg: #2a1414;
+      --amber: #fbbf24;
+      --amber-bg: #2a2110;
+      --idle-bg: #191c24;
+      --idle-text: #565d6e;
+      --code-bg: #1a1d26;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.35);
+    }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Helvetica, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
+    -webkit-font-smoothing: antialiased;
   }
   header {
-    padding: 20px 28px;
-    border-bottom: 1px solid var(--border);
+    padding: 26px 28px 24px;
     background: var(--panel);
+    border-bottom: 1px solid var(--border);
   }
-  header h1 { margin: 0 0 4px; font-size: 20px; }
-  header p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  header .inner { max-width: 1120px; margin: 0 auto; }
+  header h1 {
+    margin: 0 0 5px;
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; max-width: 640px; }
 
-  main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+  main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 70px; }
 
-  .ask-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .ask-row { display: flex; gap: 10px; margin-bottom: 12px; }
   #question {
     flex: 1;
-    padding: 11px 14px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    padding: 13px 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
     font-size: 14.5px;
+    background: var(--panel);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
+  #question:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #question::placeholder { color: var(--muted-soft); }
   #ask-btn {
-    padding: 11px 20px;
+    padding: 13px 24px;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--accent);
     color: white;
     font-size: 14.5px;
     font-weight: 600;
     cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.05s ease;
+    box-shadow: var(--shadow);
   }
-  #ask-btn:disabled { opacity: 0.5; cursor: default; }
+  #ask-btn:hover:not(:disabled) { opacity: 0.92; }
+  #ask-btn:active:not(:disabled) { transform: scale(0.98); }
+  #ask-btn:disabled { opacity: 0.55; cursor: default; }
 
-  .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 26px; }
+  .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
   .example-btn {
     font-size: 12.5px;
-    padding: 6px 10px;
+    padding: 7px 13px;
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--muted);
     cursor: pointer;
+    transition: all 0.15s ease;
   }
-  .example-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .example-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .example-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 
-  #status { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; min-height: 18px; }
+  #status {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--muted);
+    font-size: 13.5px;
+    margin-bottom: 18px;
+    min-height: 20px;
+  }
+  #status.error { color: var(--abstain); }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .total-time {
+    font-size: 12px;
+    color: var(--muted-soft);
+    margin-bottom: 14px;
+  }
+  .total-time strong { color: var(--text); font-weight: 600; }
 
   .graph {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: 4px;
     overflow-x: auto;
-    padding: 10px 4px 26px;
+    padding: 6px 4px 28px;
   }
-  .col { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 150px; }
-  .arrow { color: var(--border); font-size: 20px; padding-top: 20px; flex-shrink: 0; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 158px; }
+  .arrow { color: var(--muted-soft); font-size: 18px; padding-top: 26px; flex-shrink: 0; }
   .node {
+    position: relative;
     width: 100%;
-    padding: 12px 10px;
-    border-radius: 10px;
+    padding: 13px 12px;
+    border-radius: 12px;
     border: 1.5px solid var(--border);
     background: var(--idle-bg);
-    color: var(--muted);
+    color: var(--idle-text);
     font-size: 13px;
     font-weight: 600;
     text-align: center;
     cursor: pointer;
-    transition: transform 0.1s ease;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
   }
-  .node:hover { transform: translateY(-1px); }
-  .node .sub { display: block; font-weight: 400; font-size: 11px; margin-top: 3px; }
+  .node:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .node .step {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 1.5px solid var(--border);
+    color: var(--muted-soft);
+    font-size: 10.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .node .sub { display: block; font-weight: 400; font-size: 11px; margin-top: 3px; opacity: 0.85; }
+  .node .time-badge {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.06);
+  }
   .node.visited { background: var(--active-bg); border-color: var(--active); color: #14532d; }
+  .node.visited .step { border-color: var(--active); color: var(--active); }
+  @media (prefers-color-scheme: dark) { .node.visited { color: #86efac; } }
   .node.abstain-hit { background: var(--abstain-bg); border-color: var(--abstain); color: #7f1d1d; }
-  .node.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .branch-down { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 6px; }
-  .branch-arrow { color: var(--border); font-size: 14px; }
+  .node.abstain-hit .step { border-color: var(--abstain); color: var(--abstain); }
+  @media (prefers-color-scheme: dark) { .node.abstain-hit { color: #fca5a5; } }
+  .node.selected { box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-md); border-color: var(--accent); }
+  .branch-down { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 4px; }
+  .branch-arrow { color: var(--muted-soft); font-size: 12px; }
 
   .panel {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px 22px;
-    margin-top: 8px;
+    border-radius: var(--radius);
+    padding: 24px 26px;
+    margin-top: 10px;
+    box-shadow: var(--shadow);
   }
-  .panel h2 { margin: 0 0 14px; font-size: 15px; }
-  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 8px 14px; font-size: 13.5px; margin-bottom: 6px; }
+  .panel h2 { margin: 0 0 16px; font-size: 15.5px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .kv { display: grid; grid-template-columns: 175px 1fr; gap: 10px 14px; font-size: 13.5px; margin-bottom: 6px; }
   .kv .k { color: var(--muted); }
   .kv .v { word-break: break-word; }
   .badge {
     display: inline-block;
-    padding: 2px 9px;
+    padding: 3px 10px;
     border-radius: 999px;
     font-size: 11.5px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.01em;
   }
-  .badge.high { background: #eafbef; color: #14532d; }
-  .badge.medium { background: #fff7e6; color: #92620a; }
-  .badge.low { background: #fdeeee; color: #7f1d1d; }
-  .badge.bool-true { background: #eafbef; color: #14532d; }
-  .badge.bool-false { background: #f1f2f4; color: var(--muted); }
+  .badge.high { background: var(--active-bg); color: var(--active); }
+  .badge.medium { background: var(--amber-bg); color: var(--amber); }
+  .badge.low { background: var(--abstain-bg); color: var(--abstain); }
+  .badge.bool-true { background: var(--active-bg); color: var(--active); }
+  .badge.bool-false { background: var(--idle-bg); color: var(--muted); }
 
   .doc-list { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
-  .doc-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .doc-card {
+    border: 1px solid var(--border-soft);
+    background: var(--code-bg);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
   .doc-card .title { font-weight: 600; margin-bottom: 3px; }
-  .doc-card a { color: var(--accent); font-size: 12px; word-break: break-all; }
-  .doc-card .meta { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+  .doc-card a { color: var(--accent); font-size: 12px; word-break: break-all; text-decoration: none; }
+  .doc-card a:hover { text-decoration: underline; }
+  .doc-card .meta { color: var(--muted); font-size: 11.5px; margin-top: 5px; }
 
   .claim {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 11px 14px;
     margin-bottom: 8px;
     font-size: 13px;
     cursor: pointer;
+    transition: background 0.12s ease;
   }
+  .claim:hover { background: var(--code-bg); }
   .claim.supported { border-left: 3px solid var(--active); }
-  .claim.unsupported { border-left: 3px solid var(--abstain); opacity: 0.75; }
+  .claim.unsupported { border-left: 3px solid var(--abstain); opacity: 0.7; }
+  .claim .mark { display: inline-block; width: 16px; font-weight: 700; }
+  .claim.supported .mark { color: var(--active); }
+  .claim.unsupported .mark { color: var(--abstain); }
   .claim .quote {
     display: none;
-    margin-top: 8px;
-    padding: 8px 10px;
+    margin-top: 9px;
+    padding: 9px 11px;
     background: var(--code-bg);
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 12px;
     color: var(--muted);
     font-style: italic;
+    line-height: 1.5;
   }
   .claim.open .quote { display: block; }
 
-  .answer-text { font-size: 15px; line-height: 1.55; margin-bottom: 14px; }
-  .followup, .docreq {
+  .answer-text { font-size: 15.5px; line-height: 1.65; margin-bottom: 16px; }
+  .callout {
     white-space: pre-wrap;
     font-size: 13px;
-    background: var(--code-bg);
-    border-radius: 8px;
-    padding: 12px 14px;
+    line-height: 1.6;
+    border-radius: 10px;
+    padding: 13px 15px;
     margin-top: 10px;
+    border-left: 3px solid var(--muted-soft);
+    background: var(--code-bg);
   }
-  .section-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 16px 0 6px; }
+  .callout.info { border-left-color: var(--accent); background: var(--accent-soft); }
+  .callout.warn { border-left-color: var(--amber); background: var(--amber-bg); }
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted-soft);
+    margin: 18px 0 8px;
+  }
 
-  .empty { color: var(--muted); font-size: 13.5px; padding: 30px 0; text-align: center; }
+  .empty { color: var(--muted); font-size: 13.5px; padding: 60px 0; text-align: center; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Immigration Navigator — Execution Trace</h1>
-  <p>Every fork the pipeline can take is shown below. The path actually taken for your question is highlighted; click any node for the data behind it.</p>
+  <div class="inner">
+    <h1>Immigration Navigator — Execution Trace</h1>
+    <p>Every fork the pipeline can take is shown below. The path actually taken for your question is highlighted; click any node for the data behind it.</p>
+  </div>
 </header>
 
 <main>
@@ -186,6 +320,7 @@
   <div id="status"></div>
 
   <div id="graph-wrap" style="display:none;">
+    <div class="total-time" id="total-time"></div>
     <div class="graph" id="graph"></div>
     <div class="panel" id="detail-panel"></div>
   </div>
@@ -195,21 +330,22 @@
 
 <script>
 const NODE_DEFS = [
-  { id: "planner", label: "Planner", sub: "classify + schema-check" },
-  { id: "ground", label: "Ground", sub: "retrieve + assess" },
-  { id: "contradiction", label: "Contradiction Check", sub: "compare evidence", abstainChild: "abstain_insufficient_retrieval", abstainLabel: "Abstain", abstainSub: "no source was sufficient", branchFrom: "ground" },
-  { id: "verify", label: "Verify", sub: "faithfulness + scope", abstainChild: "abstain_unresolved_contradiction", abstainLabel: "Abstain", abstainSub: "conflict unresolved", branchFrom: "contradiction" },
-  { id: "final", label: "Build Answer", sub: "assemble Answer", abstainChild: "abstain_verification_wipeout", abstainLabel: "Abstain", abstainSub: "nothing survived verification", branchFrom: "verify" },
+  { id: "planner", label: "Planner", sub: "classify + schema-check", timingKey: "plan" },
+  { id: "ground", label: "Ground", sub: "retrieve + assess", timingKey: "ground" },
+  { id: "contradiction", label: "Contradiction Check", sub: "compare evidence", timingKey: "contradiction", abstainChild: "abstain_insufficient_retrieval", abstainLabel: "Abstain", abstainSub: "no source was sufficient" },
+  { id: "verify", label: "Verify", sub: "faithfulness + scope", timingKey: "verify", abstainChild: "abstain_unresolved_contradiction", abstainLabel: "Abstain", abstainSub: "conflict unresolved" },
+  { id: "final", label: "Build Answer", sub: "assemble Answer", abstainChild: "abstain_verification_wipeout", abstainLabel: "Abstain", abstainSub: "nothing survived verification" },
 ];
 
 let lastData = null;
 let selectedNode = null;
 
-document.getElementById("ask-btn").addEventListener("click", ask);
+document.getElementById("ask-btn").addEventListener("click", () => ask());
 document.getElementById("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
 document.querySelectorAll(".example-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.getElementById("question").value = btn.dataset.q;
+    document.querySelectorAll(".example-btn").forEach((b) => b.classList.toggle("active", b === btn));
     ask();
   });
 });
@@ -221,7 +357,8 @@ async function ask() {
   const btn = document.getElementById("ask-btn");
   const status = document.getElementById("status");
   btn.disabled = true;
-  status.textContent = "Running the pipeline (planner → ground → contradiction check → verify)…";
+  status.className = "";
+  status.innerHTML = `<span class="spinner"></span> Running the pipeline (planner → ground → contradiction check → verify)…`;
   document.getElementById("empty-state").style.display = "none";
 
   try {
@@ -234,9 +371,12 @@ async function ask() {
     lastData = await res.json();
     status.textContent = "";
     document.getElementById("graph-wrap").style.display = "block";
+    const t = lastData.timings || {};
+    document.getElementById("total-time").innerHTML = t.total !== undefined ? `Completed in <strong>${t.total.toFixed(1)}s</strong>` : "";
     renderGraph();
     selectNode(pickDefaultNode());
   } catch (err) {
+    status.className = "error";
     status.textContent = `Error: ${err.message}`;
   } finally {
     btn.disabled = false;
@@ -268,6 +408,7 @@ function hitAbstainId() {
 function renderGraph() {
   const visited = visitedMainNodes();
   const abstainHit = hitAbstainId();
+  const timings = lastData.timings || {};
   const graph = document.getElementById("graph");
   graph.innerHTML = "";
 
@@ -284,7 +425,8 @@ function renderGraph() {
     const node = document.createElement("div");
     node.className = "node" + (visited.has(def.id) ? " visited" : "");
     node.dataset.id = def.id;
-    node.innerHTML = `${def.label}<span class="sub">${def.sub}</span>`;
+    const time = def.timingKey && timings[def.timingKey] !== undefined ? `<span class="time-badge">${timings[def.timingKey].toFixed(1)}s</span>` : "";
+    node.innerHTML = `<span class="step">${i + 1}</span>${def.label}<span class="sub">${def.sub}</span>${time}`;
     node.addEventListener("click", () => selectNode(def.id));
     col.appendChild(node);
 
@@ -329,7 +471,7 @@ function badge(value) {
 }
 
 function renderDocList(docs) {
-  if (!docs || docs.length === 0) return "<p class='empty' style='padding:10px 0;'>No documents.</p>";
+  if (!docs || docs.length === 0) return "<p class='empty' style='padding:14px 0;'>No documents.</p>";
   return `<div class="doc-list">${docs.map((d) => `
     <div class="doc-card">
       <div class="title">${esc(d.title)}</div>
@@ -362,7 +504,7 @@ function renderDetail(id) {
       ${grounding.draft_answer ? `<div class="section-label">Draft answer (pre-verification)</div><div class="answer-text" style="font-size:13.5px;">${esc(grounding.draft_answer)}</div>` : ""}`;
   } else if (id === "contradiction") {
     if (!contradiction) {
-      panel.innerHTML = `<h2>Contradiction Check</h2><p class="empty">Not reached -- grounding was insufficient.</p>`;
+      panel.innerHTML = `<h2>Contradiction Check</h2><p class="empty">Not reached — grounding was insufficient.</p>`;
       return;
     }
     panel.innerHTML = `<h2>Contradiction Finder</h2>
@@ -377,7 +519,7 @@ function renderDetail(id) {
       ${renderDocList(contradiction.all_documents)}`;
   } else if (id === "verify") {
     if (!verification) {
-      panel.innerHTML = `<h2>Verifier</h2><p class="empty">Not reached -- the contradiction wasn't resolved.</p>`;
+      panel.innerHTML = `<h2>Verifier</h2><p class="empty">Not reached — the contradiction wasn't resolved.</p>`;
       return;
     }
     panel.innerHTML = `<h2>Verifier</h2>
@@ -389,21 +531,21 @@ function renderDetail(id) {
       <div class="section-label">Claims (click to see evidence)</div>
       ${verification.claims.map((c) => `
         <div class="claim ${c.supported ? "supported" : "unsupported"}" onclick="this.classList.toggle('open')">
-          ${c.supported ? "✓" : "✗"} ${esc(c.claim)}
+          <span class="mark">${c.supported ? "✓" : "✗"}</span>${esc(c.claim)}
           ${c.quote ? `<div class="quote">"${esc(c.quote)}"<br><span style="opacity:0.7;">— ${esc(c.source_url)}</span></div>` : ""}
         </div>`).join("")}`;
   } else if (id === "final") {
-    panel.innerHTML = renderAnswer(answer, false);
+    panel.innerHTML = renderAnswer(answer);
   } else if (id.startsWith("abstain_")) {
-    panel.innerHTML = renderAnswer(answer, true);
+    panel.innerHTML = renderAnswer(answer);
   }
 }
 
-function renderAnswer(answer, isAbstainView) {
+function renderAnswer(answer) {
   if (answer.abstained) {
     return `<h2>Abstained — ${esc(answer.abstain_reason)}</h2>
-      <div class="followup">${esc(answer.human_follow_up)}</div>
-      ${answer.document_request ? `<div class="section-label">Document request</div><div class="docreq">${esc(answer.document_request)}</div>` : ""}`;
+      <div class="callout warn">${esc(answer.human_follow_up)}</div>
+      ${answer.document_request ? `<div class="section-label">Document request</div><div class="callout info">${esc(answer.document_request)}</div>` : ""}`;
   }
   const confClass = (answer.confidence || "").toLowerCase();
   return `<h2>Answer <span class="badge ${confClass}">${esc(answer.confidence)} confidence</span></h2>
@@ -414,9 +556,9 @@ function renderAnswer(answer, isAbstainView) {
       <div class="k">Last updated</div><div class="v">${esc(answer.last_updated) || "unknown"}</div>
       <div class="k">Missing information</div><div class="v">${answer.missing_information.length ? esc(answer.missing_information.join(", ")) : "(none)"}</div>
     </div>
-    ${answer.document_request ? `<div class="section-label">Document request</div><div class="docreq">${esc(answer.document_request)}</div>` : ""}
+    ${answer.document_request ? `<div class="section-label">Document request</div><div class="callout info">${esc(answer.document_request)}</div>` : ""}
     <div class="section-label">Route for your specific situation</div>
-    <div class="followup">${esc(answer.human_follow_up)}</div>`;
+    <div class="callout warn">${esc(answer.human_follow_up)}</div>`;
 }
 </script>
 
