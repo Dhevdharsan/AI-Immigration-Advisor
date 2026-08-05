@@ -5,6 +5,13 @@ next tier. A real iterative loop, not a single fetch -- and capped, per
 Section 9's failure-mode table, so a question the corpus can't answer
 doesn't loop forever.
 
+Retrieval is now real semantic search over a pgvector chunk index
+(Section 12), not the original curated category -> URL lookup table --
+that shortcut broke on questions like "What is an I-20?" that don't
+belong to any of the planner's six action-oriented categories, since
+retrieval only ever looked at the category, never the actual question
+text. Semantic search fixes that by matching the real question.
+
 Only ever answers the general-rule (type-1) question (Section 3): the
 prompt explicitly forbids individualized recommendations. The
 individualized half is never handled here -- it's routed, downstream.
@@ -15,13 +22,18 @@ import json
 from openai import OpenAI
 
 from app.config import GENERATOR_MODEL, OPENAI_API_KEY
-from app.retrieval.search import IMPLEMENTED_SOURCES, retrieve
+from app.retrieval.semantic_search import semantic_search
 from app.schemas.document import SOURCE_TIER, Document
 from app.schemas.grounding import GroundingResult
 from app.schemas.plan import Plan
 from app.schemas.taxonomy import RetrievalSource
 
 MAX_ROUNDS = 4  # Section 9: hard cap so a non-converging loop routes to a human instead of spinning
+SEARCH_TOP_K = 8
+
+# Sources with real ingested content in the vector index (Section 12) -- SEVP and USCIS so
+# far; the same list app/retrieval/ingest.py populates. Only tiers 1-2 wired up so far.
+IMPLEMENTED_SOURCES: tuple[RetrievalSource, ...] = (RetrievalSource.USCIS, RetrievalSource.SEVP)
 
 _RESPONSE_SCHEMA = {
     "type": "object",
@@ -86,7 +98,7 @@ def ground(message: str, plan: Plan, client: OpenAI | None = None) -> GroundingR
     sources = _ordered_sources(plan.preferred_retrieval)[:MAX_ROUNDS]
 
     for round_num, source in enumerate(sources, start=1):
-        documents = retrieve(plan.category, source)
+        documents = semantic_search(message, top_k=SEARCH_TOP_K, source=source)
         if not documents:
             continue
         sufficient, answer = _assess_and_generate(message, documents, client)

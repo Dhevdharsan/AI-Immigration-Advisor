@@ -1,8 +1,9 @@
 """
 Tests the grounding loop's control flow in isolation (Section 5): does it
 stop as soon as a source is sufficient, escalate tiers when a source isn't,
-and give up cleanly at the round cap? Both retrieval and the LLM assessment
-call are mocked, so these need no network access or API key.
+and give up cleanly at the round cap? Both retrieval (semantic_search) and
+the LLM assessment call are mocked, so these need no network access, API
+key, or running database.
 """
 
 import json
@@ -43,7 +44,7 @@ def test_stops_on_first_sufficient_source():
     client = MagicMock()
     client.chat.completions.create.return_value = _llm_response(True, "General rule text.")
 
-    with patch("app.agents.grounding_loop.retrieve", return_value=[_doc(RetrievalSource.USCIS)]):
+    with patch("app.agents.grounding_loop.semantic_search", return_value=[_doc(RetrievalSource.USCIS)]):
         result = ground("Can I work during OPT?", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is True
@@ -59,10 +60,10 @@ def test_escalates_to_next_tier_when_first_is_insufficient():
         _llm_response(True, "Found it in tier two."),
     ]
 
-    def fake_retrieve(category, source):
+    def fake_semantic_search(query, top_k=8, source=None):
         return [_doc(source)]
 
-    with patch("app.agents.grounding_loop.retrieve", side_effect=fake_retrieve):
+    with patch("app.agents.grounding_loop.semantic_search", side_effect=fake_semantic_search):
         result = ground("Some question", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is True
@@ -74,10 +75,10 @@ def test_skips_tier_with_no_documents_without_calling_llm():
     client = MagicMock()
     client.chat.completions.create.return_value = _llm_response(True, "Answer from SEVP.")
 
-    def fake_retrieve(category, source):
+    def fake_semantic_search(query, top_k=8, source=None):
         return [] if source == RetrievalSource.USCIS else [_doc(source)]
 
-    with patch("app.agents.grounding_loop.retrieve", side_effect=fake_retrieve):
+    with patch("app.agents.grounding_loop.semantic_search", side_effect=fake_semantic_search):
         result = ground("Some question", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is True
@@ -88,7 +89,7 @@ def test_abstains_when_no_tier_is_sufficient():
     client = MagicMock()
     client.chat.completions.create.return_value = _llm_response(False, None)
 
-    with patch("app.agents.grounding_loop.retrieve", return_value=[_doc(RetrievalSource.USCIS)]):
+    with patch("app.agents.grounding_loop.semantic_search", return_value=[_doc(RetrievalSource.USCIS)]):
         result = ground("An unanswerable question", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is False

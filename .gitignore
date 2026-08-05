@@ -3,7 +3,5 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-data/corpus_cache/*
-!data/corpus_cache/.gitkeep
 .pytest_cache/
 *.egg-info/
