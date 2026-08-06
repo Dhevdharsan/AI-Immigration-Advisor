@@ -31,9 +31,16 @@ from app.schemas.taxonomy import RetrievalSource
 MAX_ROUNDS = 4  # Section 9: hard cap so a non-converging loop routes to a human instead of spinning
 SEARCH_TOP_K = 8
 
-# Sources with real ingested content in the vector index (Section 12) -- SEVP and USCIS so
-# far; the same list app/retrieval/ingest.py populates. Only tiers 1-2 wired up so far.
-IMPLEMENTED_SOURCES: tuple[RetrievalSource, ...] = (RetrievalSource.USCIS, RetrievalSource.SEVP)
+# Sources with real ingested content in the vector index (Section 12) -- the same ones
+# app/retrieval/ingest.py populates. Grouped by domain: escalating from a tax question
+# into USCIS/SEVP (or vice versa) would waste rounds searching a corpus that structurally
+# can't answer it, so a domain's tiers only ever escalate within that same domain, never
+# across into an unrelated one. Add a new tuple here (not just to one flat list) when a
+# new domain's sources come online.
+_IMMIGRATION_SOURCES: tuple[RetrievalSource, ...] = (RetrievalSource.USCIS, RetrievalSource.SEVP)
+_TAX_SOURCES: tuple[RetrievalSource, ...] = (RetrievalSource.IRS,)
+_DOMAIN_GROUPS: tuple[tuple[RetrievalSource, ...], ...] = (_IMMIGRATION_SOURCES, _TAX_SOURCES)
+IMPLEMENTED_SOURCES: tuple[RetrievalSource, ...] = _IMMIGRATION_SOURCES + _TAX_SOURCES
 
 _RESPONSE_SCHEMA = {
     "type": "object",
@@ -45,9 +52,9 @@ _RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-_SYSTEM_PROMPT = """You are the grounding loop's generation step for an immigration Q&A \
-assistant for F-1 international students. You are given a user question and one or more \
-passages retrieved from official government sources.
+_SYSTEM_PROMPT = """You are the grounding loop's generation step for an assistant that \
+answers immigration and tax questions for F-1 international students. You are given a \
+user question and one or more passages retrieved from official government sources.
 
 Decide: do these passages contain enough information to state the GENERAL rule that \
 answers the question -- a rule that applies independent of this specific person's \
@@ -63,8 +70,10 @@ the passages."""
 
 def _ordered_sources(preferred: RetrievalSource) -> list[RetrievalSource]:
     """Preferred source first (Section 4's routing refinement), then the remaining
-    implemented tiers in ranked-hierarchy order (Section 4's fallback)."""
-    ordered = sorted(IMPLEMENTED_SOURCES, key=lambda s: SOURCE_TIER[s])
+    implemented tiers in ranked-hierarchy order (Section 4's fallback) -- but only within
+    the same domain as `preferred`, never escalating into an unrelated domain's sources."""
+    group = next((g for g in _DOMAIN_GROUPS if preferred in g), IMPLEMENTED_SOURCES)
+    ordered = sorted(group, key=lambda s: SOURCE_TIER[s])
     if preferred in ordered:
         ordered.remove(preferred)
         ordered.insert(0, preferred)

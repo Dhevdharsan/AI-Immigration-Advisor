@@ -35,8 +35,23 @@ from app.schemas.contradiction import ContradictionResult
 from app.schemas.document import Document
 from app.schemas.grounding import GroundingResult
 from app.schemas.plan import Plan
-from app.schemas.taxonomy import CATEGORY_SCHEMAS
+from app.schemas.taxonomy import CATEGORY_SCHEMAS, Category
 from app.schemas.verification import VerificationResult
+
+_TAX_CATEGORIES = frozenset(
+    {
+        Category.TAX_RESIDENCY_STATUS,
+        Category.TAX_FILING_REQUIREMENTS,
+        Category.TAX_INCOME_WITHHOLDING,
+        Category.TAX_TREATY_BENEFITS,
+        Category.TAX_FICA_EXEMPTION,
+        Category.TAX_DEADLINES,
+    }
+)
+
+
+def _is_tax_category(category: Category) -> bool:
+    return category in _TAX_CATEGORIES
 
 
 class PipelineState(TypedDict, total=False):
@@ -70,8 +85,17 @@ def _timed(name: str):
 
 def _build_human_follow_up(current_plan: Plan, source: Document | None) -> str:
     """Section 3: the individualized part is never answered, always routed --
-    concretely, not with a generic disclaimer."""
-    lines = ["For advice specific to your situation, bring the following to your DSO or an accredited immigration representative:"]
+    concretely, not with a generic disclaimer. Routing target depends on domain: a DSO
+    can't help with a tax question, and a tax preparer can't help with an OPT question."""
+    if _is_tax_category(current_plan.category):
+        lines = [
+            "For advice specific to your situation, bring the following to a Certified "
+            "Acceptance Agent, a tax professional experienced with nonresident/dual-status "
+            "returns, or your university's international student tax resource (many "
+            "provide free nonresident tax software access):"
+        ]
+    else:
+        lines = ["For advice specific to your situation, bring the following to your DSO or an accredited immigration representative:"]
     if source is not None:
         lines.append(f'- This guidance: "{source.title}" ({source.url})')
     if current_plan.missing_fields:
@@ -95,6 +119,11 @@ def _build_document_request(current_plan: Plan) -> str | None:
     field_by_name = {f.name: f for f in schema.required_fields}
     document_derivable_missing = [f for f in current_plan.missing_fields if field_by_name[f].document_derivable]
     fields_text = ", ".join(document_derivable_missing) or "the details relevant to your question"
+    if _is_tax_category(current_plan.category):
+        return (
+            "To give you more specific guidance, you can share your I-20/DS-2019 or passport "
+            f"entry stamps -- this would help confirm: {fields_text}."
+        )
     return (
         "To give you more specific guidance, you can upload your I-20, EAD card, or the "
         f"relevant USCIS/SEVIS notice -- this would help confirm: {fields_text}."

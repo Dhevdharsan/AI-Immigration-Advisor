@@ -22,11 +22,20 @@ class Category(str, Enum):
     APPEALS = "Appeals"
     DEADLINES = "Deadlines"
 
+    # Tax domain (international students -- nonresident/resident alien tax topics)
+    TAX_RESIDENCY_STATUS = "Tax Residency Status"
+    TAX_FILING_REQUIREMENTS = "Tax Filing Requirements"
+    TAX_INCOME_WITHHOLDING = "Tax Income & Withholding"
+    TAX_TREATY_BENEFITS = "Tax Treaty Benefits"
+    TAX_FICA_EXEMPTION = "FICA / Social Security Tax Exemption"
+    TAX_DEADLINES = "Tax Deadlines"
+
 
 class RetrievalSource(str, Enum):
     USCIS = "USCIS"
     SEVP = "SEVP"
     STATE_DEPT = "State Department"
+    IRS = "IRS"
 
 
 @dataclass(frozen=True)
@@ -152,5 +161,113 @@ CATEGORY_SCHEMAS: dict[Category, CategorySchema] = {
             ),
         ),
         preferred_retrieval=RetrievalSource.SEVP,
+    ),
+
+    # ---------- Tax domain ----------
+    Category.TAX_RESIDENCY_STATUS: CategorySchema(
+        required_fields=(
+            FieldSpec(
+                name="Visa Status",
+                description="Current nonimmigrant visa category, e.g. F-1, J-1, H-1B",
+                allowed_values=("F-1", "J-1", "H-1B", "Other"),
+            ),
+            FieldSpec(
+                name="First US Arrival Date as Student/Exchange Visitor",
+                description="Date first admitted to the US in F/J status -- starts the 5-calendar-year "
+                "exempt-individual clock for the Substantial Presence Test",
+            ),
+        ),
+        preferred_retrieval=RetrievalSource.IRS,
+    ),
+    Category.TAX_FILING_REQUIREMENTS: CategorySchema(
+        required_fields=(
+            FieldSpec(
+                name="Tax Residency Status",
+                description="Resident alien, nonresident alien, or dual-status for the tax year in question",
+                allowed_values=("Resident Alien", "Nonresident Alien", "Dual-Status", "Unknown"),
+                document_derivable=False,
+            ),
+            FieldSpec(
+                name="Had US-Source Income This Tax Year",
+                description="Whether the person received any US-source income (wages, scholarship, etc.) "
+                "during the tax year",
+                allowed_values=("Yes", "No", "Unsure"),
+                document_derivable=False,
+            ),
+        ),
+        preferred_retrieval=RetrievalSource.IRS,
+    ),
+    Category.TAX_INCOME_WITHHOLDING: CategorySchema(
+        required_fields=(
+            FieldSpec(
+                name="Income Type",
+                description="The kind of US-source income received",
+                allowed_values=("Wages from employment", "Scholarship or fellowship grant", "Other US-source income"),
+                document_derivable=False,
+            ),
+            FieldSpec(
+                name="Tax Residency Status",
+                description="Resident alien, nonresident alien, or dual-status for the tax year in question",
+                allowed_values=("Resident Alien", "Nonresident Alien", "Dual-Status", "Unknown"),
+                document_derivable=False,
+            ),
+        ),
+        preferred_retrieval=RetrievalSource.IRS,
+    ),
+    Category.TAX_TREATY_BENEFITS: CategorySchema(
+        required_fields=(
+            FieldSpec(
+                name="Country of Tax Residence",
+                description="The country the person is a tax resident of immediately before coming to the US "
+                "-- determines which treaty, if any, applies",
+                document_derivable=False,
+            ),
+            FieldSpec(
+                name="Income Type",
+                description="The kind of US-source income the treaty benefit would apply to",
+                allowed_values=("Wages from employment", "Scholarship or fellowship grant", "Other US-source income"),
+                document_derivable=False,
+            ),
+        ),
+        preferred_retrieval=RetrievalSource.IRS,
+    ),
+    Category.TAX_FICA_EXEMPTION: CategorySchema(
+        required_fields=(
+            FieldSpec(
+                name="Visa Status",
+                description="Current nonimmigrant visa category, e.g. F-1, J-1, H-1B",
+                allowed_values=("F-1", "J-1", "H-1B", "Other"),
+            ),
+            FieldSpec(
+                name="Tax Residency Status",
+                description="FICA exemption for student employment generally requires nonresident alien status",
+                allowed_values=("Resident Alien", "Nonresident Alien", "Dual-Status", "Unknown"),
+                document_derivable=False,
+            ),
+            FieldSpec(
+                name="Employment Type",
+                description="On-campus employment, CPT, OPT/STEM OPT, or other",
+                allowed_values=("On-campus", "CPT", "OPT / STEM OPT", "Other"),
+                document_derivable=False,
+            ),
+        ),
+        preferred_retrieval=RetrievalSource.IRS,
+    ),
+    Category.TAX_DEADLINES: CategorySchema(
+        required_fields=(
+            FieldSpec(
+                name="Tax Residency Status",
+                description="Filing deadlines and forms differ between resident and nonresident aliens",
+                allowed_values=("Resident Alien", "Nonresident Alien", "Dual-Status", "Unknown"),
+                document_derivable=False,
+            ),
+            FieldSpec(
+                name="Filing Extension Requested",
+                description="Whether an extension of time to file has already been requested",
+                allowed_values=("Yes", "No", "Unsure"),
+                document_derivable=False,
+            ),
+        ),
+        preferred_retrieval=RetrievalSource.IRS,
     ),
 }

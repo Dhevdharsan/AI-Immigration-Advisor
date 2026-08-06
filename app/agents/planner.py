@@ -58,8 +58,10 @@ def _taxonomy_prompt() -> str:
     return "\n".join(lines)
 
 
-_SYSTEM_PROMPT = f"""You are the classification step of an immigration Q&A planner for \
-F-1 international students (OPT/CPT/STEM OPT/I-20/RFE/appeals/deadlines topics only).
+_SYSTEM_PROMPT = f"""You are the classification step of a Q&A planner for F-1 \
+international students, covering both immigration topics (OPT/CPT/STEM OPT/I-20/RFE/ \
+appeals/deadlines) and tax topics (residency status, filing requirements, income/ \
+withholding, tax treaty benefits, FICA exemption, tax deadlines).
 
 Given the user's question and any facts already known from earlier in the conversation \
 ("memory"), do exactly two things:

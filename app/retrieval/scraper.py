@@ -1,7 +1,9 @@
 """
-Tier 1 (USCIS) and Tier 2 (SEVP) scrapers (Section 4).
+Immigration-domain scrapers -- Tier 1 (USCIS) and Tier 2 (SEVP) -- plus the
+Tax-domain scraper (IRS). Section 4/12.
 
-Two things confirmed by hand before writing this (see project conversation):
+Two things confirmed by hand before writing the USCIS/SEVP scrapers (see
+project conversation):
   - USCIS.gov sits behind Akamai bot detection that fingerprints the TLS
     handshake itself, not just HTTP headers: `curl` and browsers pass, but
     Python's `httpx`/`requests` get a 403 "Access Denied" (Akamai block page)
@@ -12,9 +14,16 @@ Two things confirmed by hand before writing this (see project conversation):
   - The Study in the States sitemap lists URLs on `edit-studyinthestates.dhs.gov`
     (a staging host that itself 403s); they must be rewritten to the public
     `studyinthestates.dhs.gov` host before fetching.
+
+IRS.gov runs the same Drupal-based platform (same sitemap-index structure,
+same `<article>` main-content pattern) and needed no bot-detection
+workaround when checked by hand -- but its "last reviewed" date is in a
+different format ("10-Jan-2026", not "January 10, 2026"), so it gets its
+own date regex.
 """
 
 import re
+import time
 from datetime import date, datetime
 
 import httpx
@@ -29,11 +38,28 @@ _MONTH_DATE_RE = re.compile(
     r"November|December)\s+\d{1,2},\s+\d{4}\b"
 )
 
+_IRS_DATE_RE = re.compile(r"Page Last Reviewed or Updated:?\s*(\d{1,2}-[A-Za-z]{3}-\d{4})")
+
+_MAX_FETCH_RETRIES = 3
+
 
 def _fetch(url: str) -> str:
-    resp = cffi_requests.get(url, impersonate="chrome120", timeout=20)
-    resp.raise_for_status()
-    return resp.text
+    """Retries transient network failures (connection resets, timeouts) with backoff.
+    Added after IRS.gov started intermittently resetting connections partway through a
+    burst of sitemap-page requests during development -- general connectivity and USCIS.gov
+    were both unaffected at the same time, pointing to IRS-specific rate limiting rather
+    than a real outage or a bug in the request itself."""
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_FETCH_RETRIES):
+        try:
+            resp = cffi_requests.get(url, impersonate="chrome120", timeout=20)
+            resp.raise_for_status()
+            return resp.text
+        except Exception as exc:  # noqa: BLE001 -- deliberately broad: retry any transient fetch failure
+            last_exc = exc
+            if attempt < _MAX_FETCH_RETRIES - 1:
+                time.sleep(2**attempt)  # 1s, 2s
+    raise last_exc
 
 
 def _clean_text(tag) -> str:
@@ -144,3 +170,111 @@ def parse_sevp_page(html: str, url: str, lastmod: date | None = None) -> Documen
 
 def fetch_sevp_page(url: str, lastmod: date | None = None) -> Document:
     return parse_sevp_page(_fetch(url), url, lastmod)
+
+
+# ---------- IRS (Tax domain, Tier 1) ----------
+
+_IRS_LANGUAGE_PREFIXES = ("/es/", "/zh-hans/", "/zh-hant/", "/ko/", "/ru/", "/vi/", "/ht/", "/ja/", "/pt/")
+
+# Keywords confirmed by hand against the real sitemap to match international-taxpayers
+# subpages actually relevant to F-1 students (residency status, filing, treaties, FICA
+# exemption) -- not the whole 436-page international-taxpayers section, which also covers
+# unrelated populations (foreign artists/athletes on tour, US citizens living abroad, etc.).
+_INTL_TAXPAYER_KEYWORDS = (
+    "student",
+    "scholarship",
+    "nonresident",
+    "resident-alien",
+    "residency",
+    "substantial-presence",
+    "exempt-individual",
+    "social-security",
+    "medicare",
+    "totalization",
+    "tax-treat",
+    "figuring-your-tax",
+    "alien",
+    "taxation-of",
+)
+
+# Verified by hand (see project conversation) -- the specific forms/publications an F-1
+# student's tax questions actually turn on, beyond the international-taxpayers topic pages.
+_IRS_FORM_AND_PUB_URLS = (
+    "https://www.irs.gov/forms-pubs/about-form-8843",
+    "https://www.irs.gov/forms-pubs/about-form-1040-nr",
+    "https://www.irs.gov/forms-pubs/about-form-w-7",
+    "https://www.irs.gov/publications/p519",  # U.S. Tax Guide for Aliens
+    "https://www.irs.gov/publications/p901",  # U.S. Tax Treaties
+    "https://www.irs.gov/publications/p970",  # Tax Benefits for Education (scholarships/fellowships)
+)
+
+
+def list_irs_urls() -> list[str]:
+    """Walk the 12-page sitemap index, keeping English international-taxpayers subpages
+    that match a student/nonresident-alien keyword, plus the verified forms/publications.
+
+    IRS.gov doesn't 404 past the last real page: requesting page=13+ returns 200 with a
+    fallback index whose <loc> entries just point back at sitemap.xml?page=1..12 --
+    confirmed by hand. Those self-referential entries are filtered out before checking
+    for emptiness, so that fallback page (not a real network failure) is what ends the
+    walk, instead of looping on it forever."""
+    urls: list[str] = []
+    page = 1
+    while True:
+        xml = _fetch(f"https://www.irs.gov/sitemap.xml?page={page}")
+        soup = BeautifulSoup(xml, "xml")
+        locs = [loc.text.strip() for loc in soup.find_all("loc") if "sitemap.xml" not in loc.text]
+        if not locs:
+            break
+        urls.extend(locs)
+        page += 1
+        time.sleep(0.5)  # pace the burst of sitemap-page requests -- see _fetch's retry note
+
+    intl = [
+        u
+        for u in urls
+        if "/individuals/international-taxpayers/" in u and not any(p in u for p in _IRS_LANGUAGE_PREFIXES)
+    ]
+    matched = sorted(set(u for u in intl for k in _INTL_TAXPAYER_KEYWORDS if k in u.lower()))
+    return matched + list(_IRS_FORM_AND_PUB_URLS)
+
+
+def _irs_doc_type(url: str) -> DocType:
+    if "/publications/" in url:
+        return DocType.POLICY_MANUAL  # comprehensive official guide -- highest doc-type priority within IRS
+    if "/forms-pubs/about-form-" in url:
+        return DocType.OFFICIAL_FORM
+    return DocType.GUIDANCE_PAGE
+
+
+def _irs_last_updated_in(html: str) -> date | None:
+    m = _IRS_DATE_RE.search(html)
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%d-%b-%Y").date()
+    except ValueError:
+        return None
+
+
+def parse_irs_page(html: str, url: str) -> Document:
+    soup = BeautifulSoup(html, "lxml")
+
+    title = soup.title.string.strip() if soup.title and soup.title.string else url
+    title = title.split(" | Internal Revenue Service")[0].strip()
+
+    article = soup.find("article")
+    text = _clean_text(article) if article else _clean_text(soup)
+
+    return Document(
+        source=RetrievalSource.IRS,
+        doc_type=_irs_doc_type(url),
+        url=url,
+        title=title,
+        text=text,
+        last_updated=_irs_last_updated_in(html),
+    )
+
+
+def fetch_irs_page(url: str) -> Document:
+    return parse_irs_page(_fetch(url), url)

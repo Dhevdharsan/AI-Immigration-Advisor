@@ -1,28 +1,34 @@
 """
 Populates the pgvector corpus index (Section 10/12) from the known-relevant
-USCIS Policy Manual chapters and all SEVP student pages. Run this whenever
-the corpus needs (re)building -- first setup, or after content may have
-changed. Run with: python -m app.retrieval.ingest
+USCIS Policy Manual chapters, all SEVP student pages, and the IRS
+international-taxpayers corpus. Run this whenever the corpus needs
+(re)building -- first setup, or after content may have changed. Run with:
+python -m app.retrieval.ingest
 
-Scope, matching what was already hand-verified as relevant to F-1 students
-when the old curated-URL approach (app/retrieval/search.py) was built --
-the difference now is every chapter/page in scope gets embedded chunk by
-chunk, instead of only the handful of URLs someone thought to list per
-category:
+Scope, matching what was hand-verified as relevant to F-1 students (see
+project conversation for each domain's investigation):
   - USCIS Policy Manual Volume 2 Part F (Students and Exchange Visitors),
     all 9 chapters
   - USCIS Policy Manual Volume 1 Part E (Adjudications), all 10 chapters --
     general RFE/appeals/evidence procedures, not F-1-specific, but the
-    right Part for those topics (confirmed by title, Section 5's notes)
+    right Part for those topics
   - Every SEVP Study in the States /students/ page (all of them, not a
     keyword-matched subset) -- this is what makes a page like
-    "students-and-the-form-i-20" reachable at all, which the old keyword
-    lists never included
+    "students-and-the-form-i-20" reachable at all
+  - IRS.gov's international-taxpayers subpages matching a student/
+    nonresident-alien keyword, plus Form 8843/1040-NR/W-7 and Publications
+    519/901/970 (see app/retrieval/scraper.py's list_irs_urls)
 """
 
 from app.retrieval.chunking import chunk_text
 from app.retrieval.embeddings import embed_texts
-from app.retrieval.scraper import fetch_sevp_page, fetch_uscis_policy_manual_page, list_sevp_urls
+from app.retrieval.scraper import (
+    fetch_irs_page,
+    fetch_sevp_page,
+    fetch_uscis_policy_manual_page,
+    list_irs_urls,
+    list_sevp_urls,
+)
 from app.retrieval.vector_store import clear_all, init_schema, insert_chunks
 from app.schemas.chunk import ChunkRecord
 from app.schemas.document import Document
@@ -38,6 +44,7 @@ EMBED_BATCH_SIZE = 100
 def _fetch_all_documents() -> list[Document]:
     documents = [fetch_uscis_policy_manual_page(url) for url in _USCIS_URLS]
     documents += [fetch_sevp_page(url, lastmod=lastmod) for url, lastmod in list_sevp_urls()]
+    documents += [fetch_irs_page(url) for url in list_irs_urls()]
     return documents
 
 

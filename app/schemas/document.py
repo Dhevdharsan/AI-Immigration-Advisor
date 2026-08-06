@@ -35,11 +35,14 @@ DOC_TYPE_PRIORITY: list[DocType] = [
     DocType.GUIDANCE_PAGE,
 ]
 
-# Ranked hierarchy tier (Section 4). Only tiers 1-2 are wired up so far.
+# Ranked hierarchy tier (Section 4). Tiers are per-domain -- IRS is tier 1 within the tax
+# domain, not compared against USCIS/SEVP's immigration-domain tiers (the Contradiction
+# Finder only ever compares documents retrieved for the same question/category).
 SOURCE_TIER: dict[RetrievalSource, int] = {
     RetrievalSource.USCIS: 1,
     RetrievalSource.SEVP: 2,
     RetrievalSource.STATE_DEPT: 3,
+    RetrievalSource.IRS: 1,
 }
 
 
