@@ -28,11 +28,23 @@ class Confidence(str, Enum):
     LOW = "Low"
 
 
+class SourceRef(BaseModel):
+    """A distinct source page the final answer actually draws on -- not just the single
+    citation pick (`Answer.source`). Once verification stopped narrowing to one "winning"
+    document for the common no-conflict case (Section 12), a real answer can legitimately be
+    built from several corroborating pages, and the user should be able to open every one of
+    them, not just whichever one was chosen as the primary citation."""
+
+    url: str
+    title: str
+
+
 class Answer(BaseModel):
     answer: str | None  # None only when abstaining
     evidence: list[ClaimCheck] = []
     source: Document | None = None
     source_rationale: str | None = None  # Contradiction Finder's one-line rationale, if it ran
+    all_sources: list[SourceRef] = []  # every distinct source a surviving claim actually cites
     confidence: Confidence | None = None
     missing_information: list[str] = []
     document_request: str | None = None  # set when plan.needs_document -- see pipeline.py's _build_document_request

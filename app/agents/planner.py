@@ -19,7 +19,7 @@ import json
 
 from openai import OpenAI
 
-from app.config import GENERATOR_MODEL, OPENAI_API_KEY
+from app.config import GENERATOR_MODEL, get_openai_client
 from app.schemas.plan import Plan
 from app.schemas.taxonomy import CATEGORY_SCHEMAS, Category
 
@@ -99,7 +99,7 @@ def _classify(message: str, memory: dict[str, str], client: OpenAI) -> tuple[Cat
 
 def plan(message: str, memory: dict[str, str] | None = None, client: OpenAI | None = None) -> Plan:
     memory = memory or {}
-    client = client or OpenAI(api_key=OPENAI_API_KEY)
+    client = client or get_openai_client()
 
     category, known_from_llm = _classify(message, memory, client)
     schema = CATEGORY_SCHEMAS[category]

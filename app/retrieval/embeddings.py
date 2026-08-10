@@ -6,13 +6,13 @@ pgvector compares against.
 
 from openai import OpenAI
 
-from app.config import EMBEDDING_MODEL, OPENAI_API_KEY
+from app.config import EMBEDDING_MODEL, get_openai_client
 
 
 def embed_texts(texts: list[str], client: OpenAI | None = None) -> list[list[float]]:
     if not texts:
         return []
-    client = client or OpenAI(api_key=OPENAI_API_KEY)
+    client = client or get_openai_client()
     response = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
     return [item.embedding for item in response.data]
 

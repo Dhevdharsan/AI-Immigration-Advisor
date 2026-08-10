@@ -30,7 +30,7 @@ from app.agents.contradiction_finder import find_contradictions
 from app.agents.grounding_loop import ground
 from app.agents.planner import plan
 from app.agents.verifier import verify
-from app.schemas.answer import Answer, Confidence
+from app.schemas.answer import Answer, Confidence, SourceRef
 from app.schemas.contradiction import ContradictionResult
 from app.schemas.document import Document
 from app.schemas.grounding import GroundingResult
@@ -130,6 +130,24 @@ def _build_document_request(current_plan: Plan) -> str | None:
     )
 
 
+def _collect_all_sources(source: Document | None, evidence: list, documents: list[Document]) -> list[SourceRef]:
+    """Every distinct source a surviving claim actually cites, in first-appearance order --
+    not every document merely retrieved (most of those never made it into the final answer).
+    The primary `source` (Contradiction Finder's citation pick) always comes first, even in
+    the corroborating no-conflict case where none of its own sentences happened to become a
+    claim, since it's still the one explicitly named in `source_rationale`."""
+    url_to_title = {d.url: d.title for d in documents}
+    if source:
+        url_to_title.setdefault(source.url, source.title)
+
+    ordered_urls: list[str] = [source.url] if source else []
+    for claim in evidence:
+        if claim.source_url and claim.source_url not in ordered_urls:
+            ordered_urls.append(claim.source_url)
+
+    return [SourceRef(url=u, title=url_to_title.get(u, u)) for u in ordered_urls]
+
+
 def _compute_confidence(source: Document, corroborated: bool, conflict_found: bool, grounding_rate: float) -> Confidence:
     """Section 8's composite, collapsed into clear bands rather than a false-precision
     scalar. Thresholds are a provisional V1 heuristic -- calibrating them properly needs
@@ -159,9 +177,23 @@ def _contradiction_node(state: PipelineState) -> dict:
 
 @_timed("verify")
 def _verify_node(state: PipelineState) -> dict:
+    # Narrowing to the single winning document unconditionally was a real bug, caught live:
+    # the generator drafts its answer from every retrieved document (grounding_loop.py's
+    # _assess_and_generate sees the full set), but `winning_document` is the Contradiction
+    # Finder's best-citation PICK (see its docstring), not a claim that every other retrieved
+    # document is untrustworthy. With several corroborating, non-conflicting documents
+    # retrieved (now the common case after query expansion widened retrieval), narrowing
+    # verification to just the citation pick made every claim actually grounded in a
+    # different, equally-valid document fail as "unsupported" -- grounding_rate crashed to
+    # 0.0 and a real, correct answer got wiped out. Narrowing is still correct, and kept,
+    # for the one case it actually protects: when a genuine conflict was found and resolved,
+    # where the losing (contradicted) document's claims must not leak into the final answer.
     grounding = state["grounding"]
     contradiction = state["contradiction"]
-    documents = [contradiction.winning_document] if contradiction.winning_document else grounding.documents
+    if contradiction.conflict_found and contradiction.winning_document:
+        documents = [contradiction.winning_document]
+    else:
+        documents = grounding.documents
     return {"verification": verify(grounding.draft_answer, documents)}
 
 
@@ -172,6 +204,7 @@ def _build_answer_node(state: PipelineState) -> dict:
     verification = state["verification"]
 
     source = contradiction.winning_document or (grounding.documents[0] if grounding.documents else None)
+    evidence = [c for c in verification.claims if c.supported]
     confidence = _compute_confidence(
         source=source,
         corroborated=len(grounding.documents) >= 2,
@@ -181,9 +214,10 @@ def _build_answer_node(state: PipelineState) -> dict:
 
     answer = Answer(
         answer=verification.final_answer,
-        evidence=[c for c in verification.claims if c.supported],
+        evidence=evidence,
         source=source,
         source_rationale=contradiction.rationale if contradiction.conflict_found else None,
+        all_sources=_collect_all_sources(source, evidence, grounding.documents),
         confidence=confidence,
         missing_information=current_plan.missing_fields,
         document_request=_build_document_request(current_plan),

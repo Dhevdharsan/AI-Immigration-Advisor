@@ -37,7 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 from openai import OpenAI
 
 from app.agents._quotes import normalize, quote_verified
-from app.config import JUDGE_MODEL, OPENAI_API_KEY
+from app.config import JUDGE_MODEL, get_openai_client
 from app.schemas.document import Document
 from app.schemas.verification import ClaimCheck, ScopeCheck, VerificationResult
 
@@ -159,7 +159,7 @@ def _check_scope(text: str, client: OpenAI) -> ScopeCheck:
 
 
 def verify(draft_answer: str, documents: list[Document], client: OpenAI | None = None) -> VerificationResult:
-    client = client or OpenAI(api_key=OPENAI_API_KEY)
+    client = client or get_openai_client()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         claims_future = pool.submit(_check_faithfulness, draft_answer, documents, client)

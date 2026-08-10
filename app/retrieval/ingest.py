@@ -49,6 +49,17 @@ def _fetch_all_documents() -> list[Document]:
 
 
 def _chunk_document(doc: Document) -> list[ChunkRecord]:
+    """Prefixes each chunk with its page's title before it's embedded and stored (Section 12's
+    "contextual chunk" fix). A chunk is embedded and searched in total isolation from the rest
+    of its page, so a short, generically-worded chunk -- e.g. the "about Form 8843" page's
+    single chunk, whose own sentences never say the word "form" prominently up front -- reads
+    as more topically ambiguous than it should. Prefixing the page's title (here, "About Form
+    8843") gives every chunk from that page the page-level context it would otherwise lose.
+    Doesn't help a chunk whose real context is a *section* heading deeper in a large page
+    (e.g. a specific worksheet inside Publication 519) -- that's a chunking-granularity
+    problem, addressed instead by the smaller DEFAULT_CHUNK_SIZE in chunking.py. The prefix is
+    small and repeats at most a couple of times per final answer (Section 12's
+    chunks-per-document cap keeps that bounded)."""
     return [
         ChunkRecord(
             url=doc.url,
@@ -57,7 +68,7 @@ def _chunk_document(doc: Document) -> list[ChunkRecord]:
             doc_type=doc.doc_type,
             last_updated=doc.last_updated,
             chunk_index=i,
-            chunk_text=chunk,
+            chunk_text=f"{doc.title}\n\n{chunk}",
         )
         for i, chunk in enumerate(chunk_text(doc.text))
     ]

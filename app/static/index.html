@@ -314,7 +314,7 @@
   </div>
   <div class="examples">
     <button class="example-btn" data-q="Can I work while my OPT extension is pending?">Can I work while my OPT extension is pending?</button>
-    <button class="example-btn" data-q="What happens to my F-1 status if my university closes down mid-semester?">University closes mid-semester (abstain example)</button>
+    <button class="example-btn" data-q="What are the eligibility requirements for an EB-5 investor visa?">EB-5 investor visa (abstain example)</button>
     <button class="example-btn" data-q="How many days can I be absent from the US while on OPT?">How many days can I be absent while on OPT?</button>
   </div>
   <div id="status"></div>
@@ -339,6 +339,12 @@ const NODE_DEFS = [
 
 let lastData = null;
 let selectedNode = null;
+let running = false; // distinguishes "still streaming, this node just hasn't arrived yet" from
+                      // "the run finished and this node was genuinely never reached"
+let currentSource = null; // closed at the start of a new ask() so a fast second question can't
+                           // leave a stale stream still writing into the new run's state
+
+const KEY_TO_NODE_ID = { plan: "planner", grounding: "ground", contradiction: "contradiction", verification: "verify" };
 
 document.getElementById("ask-btn").addEventListener("click", () => ask());
 document.getElementById("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
@@ -350,9 +356,11 @@ document.querySelectorAll(".example-btn").forEach((btn) => {
   });
 });
 
-async function ask() {
+function ask() {
   const question = document.getElementById("question").value.trim();
   if (!question) return;
+
+  if (currentSource) currentSource.close();
 
   const btn = document.getElementById("ask-btn");
   const status = document.getElementById("status");
@@ -361,30 +369,53 @@ async function ask() {
   status.innerHTML = `<span class="spinner"></span> Running the pipeline (planner → ground → contradiction check → verify)…`;
   document.getElementById("empty-state").style.display = "none";
 
-  try {
-    const res = await fetch("/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: question }),
-    });
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
-    lastData = await res.json();
+  // Show the graph immediately, all idle -- steps light up live as each one's own SSE event
+  // arrives, instead of one long blank wait until the whole ~15-75s pipeline finishes.
+  lastData = { plan: null, grounding: null, contradiction: null, verification: null, answer: null, timings: {} };
+  running = true;
+  selectedNode = null;
+  document.getElementById("graph-wrap").style.display = "block";
+  document.getElementById("total-time").textContent = "";
+  document.getElementById("detail-panel").innerHTML = "";
+  renderGraph();
+
+  const source = new EventSource(`/ask/stream?message=${encodeURIComponent(question)}`);
+  currentSource = source;
+
+  source.addEventListener("node", (e) => {
+    const payload = JSON.parse(e.data);
+    Object.assign(lastData, payload.data);
+    lastData.timings = payload.timings;
+    renderGraph();
+    const updatedKey = Object.keys(payload.data)[0];
+    const nodeId = updatedKey === "answer" ? pickDefaultNode() : KEY_TO_NODE_ID[updatedKey];
+    if (nodeId) selectNode(nodeId);
+  });
+
+  source.addEventListener("done", (e) => {
+    lastData = JSON.parse(e.data);
+    running = false;
     status.textContent = "";
-    document.getElementById("graph-wrap").style.display = "block";
     const t = lastData.timings || {};
     document.getElementById("total-time").innerHTML = t.total !== undefined ? `Completed in <strong>${t.total.toFixed(1)}s</strong>` : "";
     renderGraph();
     selectNode(pickDefaultNode());
-  } catch (err) {
-    status.className = "error";
-    status.textContent = `Error: ${err.message}`;
-  } finally {
     btn.disabled = false;
-  }
+    source.close();
+  });
+
+  source.onerror = () => {
+    running = false;
+    status.className = "error";
+    status.textContent = "Error: connection to the server was lost.";
+    btn.disabled = false;
+    source.close();
+  };
 }
 
 function pickDefaultNode() {
   const a = lastData.answer;
+  if (!a) return null; // hasn't streamed in yet
   if (!a.abstained) return "final";
   if (a.abstain_reason === "insufficient_retrieval") return "abstain_insufficient_retrieval";
   if (a.abstain_reason === "unresolved_contradiction") return "abstain_unresolved_contradiction";
@@ -392,16 +423,18 @@ function pickDefaultNode() {
 }
 
 function visitedMainNodes() {
-  const visited = new Set(["planner", "ground"]);
-  if (lastData.contradiction !== null) visited.add("contradiction");
-  if (lastData.verification !== null) visited.add("verify");
-  if (!lastData.answer.abstained) visited.add("final");
+  const visited = new Set();
+  if (lastData.plan) visited.add("planner");
+  if (lastData.grounding) visited.add("ground");
+  if (lastData.contradiction) visited.add("contradiction");
+  if (lastData.verification) visited.add("verify");
+  if (lastData.answer && !lastData.answer.abstained) visited.add("final");
   return visited;
 }
 
 function hitAbstainId() {
   const a = lastData.answer;
-  if (!a.abstained) return null;
+  if (!a || !a.abstained) return null;
   return "abstain_" + a.abstain_reason;
 }
 
@@ -483,8 +516,10 @@ function renderDocList(docs) {
 function renderDetail(id) {
   const panel = document.getElementById("detail-panel");
   const { plan, grounding, contradiction, verification, answer } = lastData;
+  const pendingOr = (notReachedText) => `<p class="empty">${running ? "Pending…" : notReachedText}</p>`;
 
   if (id === "planner") {
+    if (!plan) { panel.innerHTML = `<h2>Planner</h2>${pendingOr("Not reached.")}`; return; }
     panel.innerHTML = `<h2>Planner</h2>
       <div class="kv">
         <div class="k">Category</div><div class="v">${esc(plan.category)}</div>
@@ -494,6 +529,7 @@ function renderDetail(id) {
         <div class="k">Preferred retrieval</div><div class="v">${esc(plan.preferred_retrieval)}</div>
       </div>`;
   } else if (id === "ground") {
+    if (!grounding) { panel.innerHTML = `<h2>Grounding Loop</h2>${pendingOr("Not reached.")}`; return; }
     panel.innerHTML = `<h2>Grounding Loop</h2>
       <div class="kv">
         <div class="k">Sufficient</div><div class="v">${badge(grounding.sufficient)}</div>
@@ -504,7 +540,7 @@ function renderDetail(id) {
       ${grounding.draft_answer ? `<div class="section-label">Draft answer (pre-verification)</div><div class="answer-text" style="font-size:13.5px;">${esc(grounding.draft_answer)}</div>` : ""}`;
   } else if (id === "contradiction") {
     if (!contradiction) {
-      panel.innerHTML = `<h2>Contradiction Check</h2><p class="empty">Not reached — grounding was insufficient.</p>`;
+      panel.innerHTML = `<h2>Contradiction Check</h2>${pendingOr("Not reached — grounding was insufficient.")}`;
       return;
     }
     panel.innerHTML = `<h2>Contradiction Finder</h2>
@@ -519,7 +555,7 @@ function renderDetail(id) {
       ${renderDocList(contradiction.all_documents)}`;
   } else if (id === "verify") {
     if (!verification) {
-      panel.innerHTML = `<h2>Verifier</h2><p class="empty">Not reached — the contradiction wasn't resolved.</p>`;
+      panel.innerHTML = `<h2>Verifier</h2>${pendingOr("Not reached — the contradiction wasn't resolved.")}`;
       return;
     }
     panel.innerHTML = `<h2>Verifier</h2>
@@ -534,9 +570,8 @@ function renderDetail(id) {
           <span class="mark">${c.supported ? "✓" : "✗"}</span>${esc(c.claim)}
           ${c.quote ? `<div class="quote">"${esc(c.quote)}"<br><span style="opacity:0.7;">— ${esc(c.source_url)}</span></div>` : ""}
         </div>`).join("")}`;
-  } else if (id === "final") {
-    panel.innerHTML = renderAnswer(answer);
-  } else if (id.startsWith("abstain_")) {
+  } else if (id === "final" || id.startsWith("abstain_")) {
+    if (!answer) { panel.innerHTML = `<h2>Answer</h2>${pendingOr("Not reached.")}`; return; }
     panel.innerHTML = renderAnswer(answer);
   }
 }
@@ -551,7 +586,7 @@ function renderAnswer(answer) {
   return `<h2>Answer <span class="badge ${confClass}">${esc(answer.confidence)} confidence</span></h2>
     <div class="answer-text">${esc(answer.answer)}</div>
     <div class="kv">
-      <div class="k">Source</div><div class="v">${answer.source ? `<a href="${esc(answer.source.url)}" target="_blank">${esc(answer.source.title)}</a>` : "—"}</div>
+      <div class="k">${answer.all_sources.length > 1 ? "Sources" : "Source"}</div><div class="v">${renderSources(answer.all_sources, answer.source)}</div>
       ${answer.source_rationale ? `<div class="k">Source rationale</div><div class="v">${esc(answer.source_rationale)}</div>` : ""}
       <div class="k">Last updated</div><div class="v">${esc(answer.last_updated) || "unknown"}</div>
       <div class="k">Missing information</div><div class="v">${answer.missing_information.length ? esc(answer.missing_information.join(", ")) : "(none)"}</div>
@@ -559,6 +594,16 @@ function renderAnswer(answer) {
     ${answer.document_request ? `<div class="section-label">Document request</div><div class="callout info">${esc(answer.document_request)}</div>` : ""}
     <div class="section-label">Route for your specific situation</div>
     <div class="callout warn">${esc(answer.human_follow_up)}</div>`;
+}
+
+function renderSources(allSources, fallbackSource) {
+  // `all_sources` covers every distinct page a surviving claim actually cites (Section 12) --
+  // falls back to the single citation pick for older cached responses that predate the field.
+  const sources = (allSources && allSources.length) ? allSources : (fallbackSource ? [fallbackSource] : []);
+  if (!sources.length) return "—";
+  return sources
+    .map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a>`)
+    .join("<br>");
 }
 </script>
 

@@ -4,10 +4,20 @@ embed meaningfully (a whole 40,000-character policy manual chapter embedded
 as one vector would blur together too many unrelated topics to be useful
 for similarity search). The overlap means a sentence that would otherwise
 land right on a chunk boundary still shows up whole in at least one chunk.
+
+Confirmed by hand: at the original 1200-char size, a real answer -- a
+specific dollar-figure worksheet in Publication 519 -- got diluted enough
+by unrelated surrounding boilerplate (a charitable-deduction aside before
+it, filing instructions after) that it ranked ~165th/~526th out of 1575
+chunks on vector/keyword search for a directly relevant question, despite
+containing the literal answer. A smaller chunk size keeps less unrelated
+material in the same embedding, so a short, concrete passage like that
+worksheet dominates its own chunk's meaning instead of being outweighed
+by whatever surrounds it in the source page.
 """
 
-DEFAULT_CHUNK_SIZE = 1200
-DEFAULT_OVERLAP = 200
+DEFAULT_CHUNK_SIZE = 800
+DEFAULT_OVERLAP = 150
 
 
 def chunk_text(text: str, chunk_size: int = DEFAULT_CHUNK_SIZE, overlap: int = DEFAULT_OVERLAP) -> list[str]:

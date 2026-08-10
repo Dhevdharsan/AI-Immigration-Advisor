@@ -28,7 +28,7 @@ import json
 from openai import OpenAI
 
 from app.agents._quotes import quote_verified
-from app.config import GENERATOR_MODEL, OPENAI_API_KEY
+from app.config import GENERATOR_MODEL, get_openai_client
 from app.schemas.contradiction import ContradictionResult, SupportingQuote
 from app.schemas.document import DOC_TYPE_PRIORITY, Document
 
@@ -123,7 +123,7 @@ def find_contradictions(
             all_documents=documents,
         )
 
-    client = client or OpenAI(api_key=OPENAI_API_KEY)
+    client = client or get_openai_client()
     passages = "\n\n".join(_doc_block(doc) for doc in documents)
     response = client.chat.completions.create(
         model=GENERATOR_MODEL,

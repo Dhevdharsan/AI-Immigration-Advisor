@@ -1,9 +1,16 @@
 """
-Tests the grounding loop's control flow in isolation (Section 5): does it
-stop as soon as a source is sufficient, escalate tiers when a source isn't,
-and give up cleanly at the round cap? Both retrieval (semantic_search) and
-the LLM assessment call are mocked, so these need no network access, API
-key, or running database.
+Tests the grounding loop's control flow in isolation (Section 5): does the
+higher-priority tier win when it succeeds, does a lower tier's answer get
+used when the higher one doesn't succeed, and does it abstain cleanly when
+nothing does? Both retrieval (semantic_search) and the LLM assessment call
+are mocked, so these need no network access, API key, or running database.
+
+All tiers are now queried and assessed CONCURRENTLY (see grounding_loop.py's
+`ground`), so the shared mock client dispatches on request content --
+which schema is being requested (query_expansion vs grounding_assessment),
+and for the latter, which source's document text is in the passages --
+rather than on call order, since thread scheduling order isn't
+guaranteed. Same pattern as test_verifier.py's already-concurrent checks.
 """
 
 import json
@@ -40,56 +47,78 @@ def _llm_response(sufficient: bool, answer: str | None):
     return MagicMock(choices=[MagicMock(message=MagicMock(content=payload))])
 
 
-def test_stops_on_first_sufficient_source():
-    client = MagicMock()
-    client.chat.completions.create.return_value = _llm_response(True, "General rule text.")
+def _expansion_response(sub_queries: list[str] | None = None):
+    payload = json.dumps({"sub_queries": sub_queries or []})
+    return MagicMock(choices=[MagicMock(message=MagicMock(content=payload))])
 
-    with patch("app.agents.grounding_loop.semantic_search", return_value=[_doc(RetrievalSource.USCIS)]):
+
+def _client(sufficiency_by_source: dict[RetrievalSource, tuple[bool, str | None]]):
+    """Dispatches on the request itself: the expansion call has a distinct schema name, and a
+    sufficiency-check call's passages embed the source's name (via `_doc`'s url), so which
+    source a given concurrent call is about can be told apart without relying on order."""
+
+    def side_effect(*args, **kwargs):
+        schema_name = kwargs["response_format"]["json_schema"]["name"]
+        if schema_name == "query_expansion":
+            return _expansion_response()
+        assert schema_name == "grounding_assessment"
+        user_content = kwargs["messages"][1]["content"]
+        for source, (sufficient, answer) in sufficiency_by_source.items():
+            if source.value in user_content:
+                return _llm_response(sufficient, answer)
+        raise AssertionError(f"unexpected call content: {user_content!r}")
+
+    client = MagicMock()
+    client.chat.completions.create.side_effect = side_effect
+    return client
+
+
+def test_higher_tier_wins_when_it_succeeds():
+    client = _client({RetrievalSource.USCIS: (True, "General rule text."), RetrievalSource.SEVP: (False, None)})
+
+    with patch("app.agents.grounding_loop.semantic_search", side_effect=lambda query, top_k=8, source=None, extra_queries=None, client=None: [_doc(source)]):
         result = ground("Can I work during OPT?", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is True
-    assert result.rounds_used == 1
+    assert result.rounds_used == 1  # USCIS is tier position 1
     assert result.draft_answer == "General rule text."
-    client.chat.completions.create.assert_called_once()
 
 
-def test_escalates_to_next_tier_when_first_is_insufficient():
-    client = MagicMock()
-    client.chat.completions.create.side_effect = [
-        _llm_response(False, None),
-        _llm_response(True, "Found it in tier two."),
-    ]
+def test_lower_tier_used_when_higher_tier_is_insufficient():
+    client = _client({RetrievalSource.USCIS: (False, None), RetrievalSource.SEVP: (True, "Found it in tier two.")})
 
-    def fake_semantic_search(query, top_k=8, source=None):
+    def fake_semantic_search(query, top_k=8, source=None, extra_queries=None, client=None):
         return [_doc(source)]
 
     with patch("app.agents.grounding_loop.semantic_search", side_effect=fake_semantic_search):
         result = ground("Some question", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is True
-    assert result.rounds_used == 2
+    assert result.rounds_used == 2  # SEVP is tier position 2
     assert result.draft_answer == "Found it in tier two."
 
 
 def test_skips_tier_with_no_documents_without_calling_llm():
-    client = MagicMock()
-    client.chat.completions.create.return_value = _llm_response(True, "Answer from SEVP.")
+    client = _client({RetrievalSource.SEVP: (True, "Answer from SEVP.")})
 
-    def fake_semantic_search(query, top_k=8, source=None):
+    def fake_semantic_search(query, top_k=8, source=None, extra_queries=None, client=None):
         return [] if source == RetrievalSource.USCIS else [_doc(source)]
 
     with patch("app.agents.grounding_loop.semantic_search", side_effect=fake_semantic_search):
         result = ground("Some question", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is True
-    client.chat.completions.create.assert_called_once()  # never called for the empty USCIS round
+    # expansion + one sufficiency call (never called for the empty USCIS tier)
+    assert client.chat.completions.create.call_count == 2
 
 
 def test_abstains_when_no_tier_is_sufficient():
-    client = MagicMock()
-    client.chat.completions.create.return_value = _llm_response(False, None)
+    client = _client({RetrievalSource.USCIS: (False, None), RetrievalSource.SEVP: (False, None)})
 
-    with patch("app.agents.grounding_loop.semantic_search", return_value=[_doc(RetrievalSource.USCIS)]):
+    def fake_semantic_search(query, top_k=8, source=None, extra_queries=None, client=None):
+        return [_doc(source)]
+
+    with patch("app.agents.grounding_loop.semantic_search", side_effect=fake_semantic_search):
         result = ground("An unanswerable question", _plan(RetrievalSource.USCIS), client=client)
 
     assert result.sufficient is False
