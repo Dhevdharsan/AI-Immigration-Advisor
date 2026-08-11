@@ -16,7 +16,7 @@ guaranteed. Same pattern as test_verifier.py's already-concurrent checks.
 import json
 from unittest.mock import MagicMock, patch
 
-from app.agents.grounding_loop import ground
+from app.agents.grounding_loop import _MAX_EXPANSIONS, _expand_queries, ground
 from app.schemas.document import DocType, Document
 from app.schemas.plan import Plan
 from app.schemas.taxonomy import Category, RetrievalSource
@@ -125,3 +125,13 @@ def test_abstains_when_no_tier_is_sufficient():
     assert result.documents == []
     assert result.draft_answer is None
     assert result.rounds_used == 2  # both implemented tiers (USCIS, SEVP) tried
+
+
+def test_expand_queries_truncates_to_max_expansions():
+    client = MagicMock()
+    client.chat.completions.create.return_value = _expansion_response(["q1", "q2", "q3", "q4"])
+
+    result = _expand_queries("Some question", client)
+
+    assert len(result) == _MAX_EXPANSIONS
+    assert result == ["q1", "q2", "q3", "q4"][:_MAX_EXPANSIONS]
